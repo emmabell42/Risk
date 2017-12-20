@@ -1,54 +1,24 @@
-# This is the code James used to analyse the breast cancer WGBS
+# This is the code James used to read the breast cancer WGBS into R and look for windows where the confidence intervals between cases and controls don't overlap
+# The RDS files for each chromosome are stored here: /data/SHARE/GINA/methpredict/
 
-"/data/SHARE/GINA/methpredict/WGBS_BrCa_200bpWindowCIs_chr1.rds"
-
-wg.wgbs.windows<-readRDS("WGBS_BrCa_200bpWindowCIs_chr17.rds")
+wg.wgbs.windows<-readRDS("/data/SHARE/GINA/methpredict/WGBS_BrCa_200bpWindowCIs_chr1.rds")
 sum(wg.wgbs.windows$ControlLCI-wg.wgbs.windows$CaseUCI>0,na.rm=T)
 sum(wg.wgbs.windows$CaseLCI-wg.wgbs.windows$ControlUCI>0,na.rm=T)
 
 path
 data/SHARE/GINA/methpredict/
 
-wg.wgbs.windows<-readRDS("WGBS_BrCa_200bpWindowCIs_chr17.rds")
-
-i=1
-
-filez<-paste("WGBS_BrCa_200bpWindowCIs_chr",i,".rds", sep="")
-
-wg.wgbs.windows<-readRDS(filez)
-wh1<-which(wg.wgbs.windows$ControlLCI-wg.wgbs.windows$CaseUCI>5)
-wh2<-which(wg.wgbs.windows$CaseLCI-wg.wgbs.windows$ControlUCI>5)
-gr.all.diff<-wg.wgbs.windows[c(wh1,wh2),]
-
-gr.all.5<-gr.all.diff
-gr.all<-wg.wgbs.windows
-
-for (i in 2:22)
-{
-
-filez<-paste("WGBS_BrCa_200bpWindowCIs_chr",i,".rds", sep="")
-
-wg.wgbs.windows<-readRDS(filez)
-wh1<-which(wg.wgbs.windows$ControlLCI-wg.wgbs.windows$CaseUCI>5)
-wh2<-which(wg.wgbs.windows$CaseLCI-wg.wgbs.windows$ControlUCI>5)
-gr.all.diff<-wg.wgbs.windows[c(wh1,wh2),]
-
-gr.all.5<-c(gr.all.5,gr.all.diff)
-gr.all<-c(gr.all,wg.wgbs.windows)
+for (i in c(1:22,"X"){
+	filez<-paste("WGBS_BrCa_200bpWindowCIs_chr",i,".rds", sep="")
+	wg.wgbs.windows<-readRDS(filez)
+	wh1<-which(wg.wgbs.windows$ControlLCI-wg.wgbs.windows$CaseUCI>5)
+	wh2<-which(wg.wgbs.windows$CaseLCI-wg.wgbs.windows$ControlUCI>5)
+	gr.all.diff<-wg.wgbs.windows[c(wh1,wh2),]
+	gr.all.5<-c(gr.all.5,gr.all.diff)
+	gr.all<-c(gr.all,wg.wgbs.windows)
 }
 
-filez<-paste("WGBS_BrCa_200bpWindowCIs_chr","X",".rds", sep="")
-
-wg.wgbs.windows<-readRDS(filez)
-wh1<-which(wg.wgbs.windows$ControlLCI-wg.wgbs.windows$CaseUCI>5)
-wh2<-which(wg.wgbs.windows$CaseLCI-wg.wgbs.windows$ControlUCI>5)
-gr.all.diff<-wg.wgbs.windows[c(wh1,wh2),]
-
-gr.all.5<-c(gr.all.5,gr.all.diff)
-gr.all<-c(gr.all,wg.wgbs.windows)
-
 sum(wg.wgbs.windows$ControlLCI-wg.wgbs.windows$CaseUCI>5,na.rm=T)
-
 sum(wg.wgbs.windows$CaseLCI-wg.wgbs.windows$ControlUCI>5,na.rm=T)
 
 gr.all<-wg.wgbs.windows
