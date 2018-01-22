@@ -65,7 +65,7 @@ for(i in 1:length(cancerType)){
 		chr <- gr.all[[j]]
 		diffs <- chr$Casemean-chr$Controlmean
 		abs.diffs <- abs(diffs)
-		bins[[j]] <- which(abs.diffs>20)
+		bins[[j]] <- which(abs.diffs>=20)
 	}
 
 	gr.diff <- gr.all
@@ -74,12 +74,15 @@ for(i in 1:length(cancerType)){
 		gr.diff[[j]] <- gr.diff[[j]][bins[[j]]]
 		lengths <- c(lengths,length(bins[[j]]))
 	}
+	
+	# Write out GRanges object as RDS
+	toName <- paste0(cancerType[i],"_",min.diff,"_delta20_gr.RDS")
+	saveRDS(gr.diff,toName)
 
+	# Calculate the proportion of the genome represented by delta20 windows
 	lengths.200 <- lengths*200
-
 	chr.props <- lengths.200/hg19[,3]
 	chr.pc <- chr.props*100
-
 	plotName <- paste0(cancerType[i],"_",min.diff,"_barplot_pc_delta20_byChr.png")
 
 	png(plotName,h=3,w=6,unit="in",res=300)
@@ -87,14 +90,21 @@ for(i in 1:length(cancerType)){
 	barplot(chr.pc,ylab="Percentage of chr",names=c(1:22,"X"),cex.names=0.5,cex.axis=0.6)
 	dev.off()
 
+	# Create a data frame from the GRanges object and write out to run through HOMER for annotation
+	
 	df.diff <- c() 
 	for(j in 1:23){
-		df.diff <- rbind(df.diff,data.frame(seqnames=seqnames(gr.diff[[j]]),starts=start(gr.diff[[j]])-1,ends=end(gr.diff[[j]])))
+		df.diff <- rbind(df.diff,data.frame(seqnames=seqnames(gr.diff[[j]]),starts=start(gr.diff[[j]])-1,ends=end(gr.diff[[j]]),mcols(gr.diff[[j]])))
+		
 	}
 	id <- paste(df.diff[,1],df.diff[,2],sep="_")
-	df.diff <- cbind(df.diff,id,"","0")
+	df.diff <- cbind(df.diff,id)
+	
+	toName <- paste0(cancerType[i],".diff.gr")
+	assign(toName,df.diff)
+	
+	df.diff.towrite <- cbind(df.diff[,1:3],id,"","0")
 	toName <- paste0(cancerType[i],"_",min.diff,"_delta20_CI.txt")
-	write.table(df.diff,toName,sep="\t",quote=F,row.names=F,col.names=F)
-
+	write.table(df.diff.towrite,toName,sep="\t",quote=F,row.names=F,col.names=F)
 }
 
