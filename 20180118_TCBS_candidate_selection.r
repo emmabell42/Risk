@@ -1,107 +1,93 @@
 # This code compiles the target capture bisulphite seq candidate table
 # Candidates must have a high number of CpGs, high difference in methylation and adjacent windows
-
-cancerType <- c("OvCa","BrCa")
+options(scipen = 999)
+cancerType <- c("OvCa")
 min.diff <- 0
 
-gr <- list.files()[grep("RDS",list.files())]
-for(i in 1:length(gr)){
-	reading <- readRDS(gr[i])
-	toName <- paste0(cancerType[i],".diff.gr")
+grNames <- list.files()[grep("RDS",list.files())]
+grNames <- grNames[grep(paste0(cancerType,collapse="|"),grNames)]
+for(i in 1:length(grNames)){
+	reading <- readRDS(grNames[i])
+	toName <- gsub(".RDS",".gr",grNames[i])
 	assign(toName,reading)
 }
+rm(i)
+rm(reading)
+rm(toName)
 
 # Sequence composition analysis
 
 library(GenomicRanges)
-
 library(BSgenome.Hsapiens.UCSC.hg19, quietly = TRUE)
 library(TxDb.Hsapiens.UCSC.hg19.knownGene, quietly = TRUE)
-
 library(stringr)
 
-for(i in 1:length(cancerType)){
+for(i in 1:length(grNames)){
 
-	type <- cancerType[i]
-	gr <- get(paste0(cancerType[i],".diff.gr"))
+	grName <- gsub(".RDS",".gr",grNames[i])
+	gr <- get(grName)
 		
-	cat("\n","Analysing cancer type: ",type)
-	
 	for(j in 1:23){
-	gr.chr <- gr[[j]]
-	mcols(gr.chr) <- data.frame(mcols(gr.chr))[,1:6]
-	seqs <- getSeq(Hsapiens, seqnames(gr.chr), start(gr.chr), end(gr.chr), as.character = T)
+		gr.chr <- gr[[j]]
+		mcols(gr.chr) <- data.frame(mcols(gr.chr))[,1:6]
+		seqs <- getSeq(Hsapiens, seqnames(gr.chr), start(gr.chr), end(gr.chr), as.character = T)
 
-	# Calculate CpG, C and G frequency
+		# Calculate CpG, C and G frequency
 
-	cg.count <- rep(NA,length(gr.chr))
-	c.count <- rep(NA,length(gr.chr))
-	g.count <- rep(NA,length(gr.chr))
+		cg.count <- rep(NA,length(gr.chr))
+		#c.count <- rep(NA,length(gr.chr))
+		#g.count <- rep(NA,length(gr.chr))
 
-	for(k in 1:length(gr.chr)){
-		cg.count[k] <- str_count(seqs[k], fixed("CG"))
-		c.count[k] <- str_count(seqs[k], fixed("C"))
-		g.count[k] <- str_count(seqs[k], fixed("G"))
-	}
-	
-	# Calculate GC%
-	GC <- (c.count+g.count)/200
-	toName <- paste0(type,".GC")
-	assign(toName,GC)
-	
-	# Calculate normalised CpG fraction
-	
-	# Saxonov method
-	#oe <- (cg.count/(200))/((GC/2)^2)
-	
-	# Gardiner-Garden and Frommer method
-	oe <- (cg.count/(c.count*g.count))*200
-	toName <- paste0(type,".CpG.norm")
-	assign(toName,oe)
-	
-	# Which qualify as a CGI?
-	
-	CGI <- GC>=0.5 & oe >=0.6
-	
-	mcols(gr.chr) <- cbind(mcols(gr.chr),data.frame(CpGs=cg.count,GC=GC,NormCpG=oe,CGI=CGI))
-	
-	gr[[j]] <- gr.chr
+		for(k in 1:length(gr.chr)){
+				cg.count[k] <- str_count(seqs[k], fixed("CG"))
+			#	c.count[k] <- str_count(seqs[k], fixed("C"))
+			#	g.count[k] <- str_count(seqs[k], fixed("G"))
+		}
+		
+		# Calculate GC%
+		#GC <- (c.count+g.count)/200
+		#toName <- paste0(type,".GC")
+		#assign(toName,GC)
+		
+		# Calculate normalised CpG fraction
+		
+		# Saxonov method
+		#oe <- (cg.count/(200))/((GC/2)^2)
+		
+		# Gardiner-Garden and Frommer method
+		#oe <- (cg.count/(c.count*g.count))*200
+		#toName <- paste0(type,".CpG.norm")
+		#assign(toName,oe)
+		
+		# Which qualify as a CGI?
+		
+		#CGI <- GC>=0.5 & oe >=0.6
+		
+		#mcols(gr.chr) <- cbind(mcols(gr.chr),data.frame(CpGs=cg.count,GC=GC,NormCpG=oe,CGI=CGI))
+		mcols(gr.chr) <- cbind(mcols(gr.chr),data.frame(CpGs=cg.count))
+		
+		gr[[j]] <- gr.chr
 	}
 	
 	# Write to R object
-	toName <- paste0(cancerType[i],".diff.gr")
-	assign(toName,gr)
+	assign(grName,gr)
 	
-	# Write to RDS
-	toName <- paste0(cancerType[i],"_",min.diff,"_delta20_gr.RDS")
-	saveRDS(gr,toName)
 }
-cat("\n")
-
-Lab.palette <- colorRampPalette(c("blue", "orange", "red"), space = "Lab")
-chr.names <- paste("Chr",c(1:22,"X"),sep=" ")
-
-for(i in 1:length(cancerType)){
-type <- cancerType[i]
-toName <- paste0(type,"_",min.diff,"_GCvsCpG.png")
-GC <- get(paste0(type,".GC"))
-CpG <- get(paste0(type,".CpG"))
-CGI <- length(which(GC>=0.5 & CpG >=0.6))
-png(toName,h=6,w=6,unit="in",res=300)
-smoothScatter(GC,CpG,colramp = Lab.palette,pch=NA,cex.axis=0.6)
-abline(h=0.6,v=0.5,col="white",lty=2)
-legend("topright",legend=CGI,text.col="white",bg=NA,bty="n")
-dev.off()
-}
+rm(cg.count)
+rm(gr.chr)
+rm(grName)
+rm(gr)
+rm(i)
+rm(j)
+rm(k)
+rm(seqs)
 
 # Find adjacent windows
 
-for(i in 1:length(cancerType)){
+for(i in 1:length(grNames)){
 
-	type <- cancerType[i]
-	gr <- get(paste0(cancerType[i],".diff.gr"))
-		
-	cat("\n","Analysing cancer type: ",type)
+	grName <- gsub(".RDS",".gr",grNames[i])
+	gr <- get(grName)
 	
 	for(j in 1:23){
 		gr.chr <- gr[[j]]
@@ -115,109 +101,147 @@ for(i in 1:length(cancerType)){
 	}
 
 	# Write to R object
-	toName <- paste0(cancerType[i],".diff.gr")
-	assign(toName,gr)
-	
-	# Write to RDS
-	toName <- paste0(cancerType[i],"_",min.diff,"_delta20_gr.RDS")
-	saveRDS(gr,toName)	
-	
+	assign(grName,gr)
+		
 }
 
-chr.names <- c(1:22,"X")
+rm(grName)
+rm(gr)
+rm(gr.chr)
+rm(gr.reduce)
+rm(overlaps)
+rm(i)
+rm(j)
 
-for(i in 1:length(cancerType)){
-
-	type <- cancerType[i]
-	gr <- get(paste0(cancerType[i],".diff.gr"))
-	adj <- c()
-	cgi <- c()
-	both <- c()
-	gr.pyro.candidates <- gr
-	
-	for(j in 1:23){
-		gr.chr <- gr[[j]]
-		adj <- c(adj,table(mcols(gr.chr)[[11]])[[2]])
-		cgi <- c(cgi,table(mcols(gr.chr)[[10]])[[2]])
-		both <- c(both,length(which(mcols(gr.chr)[[10]]==1 & mcols(gr.chr)[[11]]==1)))
-		gr.pyro.candidates[[j]] <- gr.chr[which(mcols(gr.chr)[[10]]==1 & mcols(gr.chr)[[11]]==1)]
-	}
-	
-	toName <- paste0(type,"_",min.diff,"_numAdjacentWindows.png")
-	png(toName,h=3,w=6,unit="in",res=300)
-	barplot(adj,names=chr.names,ylab="# delta 20 windows",cex.names=0.5)
-	dev.off()
-
-	toName <- paste0(type,"_",min.diff,"_pcAdjacentWindows.png")
-	png(toName,h=3,w=6,unit="in",res=300)
-	barplot((adj/sum(adj))*100,names=chr.names,ylab="PC of delta 20 windows",cex.names=0.5)
-	dev.off()
-	
-	toName <- paste0(type,"_",min.diff,"_numCGI.png")
-	png(toName,h=3,w=6,unit="in",res=300)
-	barplot(cgi,names=chr.names,ylab="# delta 20 windows",cex.names=0.5)
-	dev.off()
-	
-	toName <- paste0(type,"_",min.diff,"_numAdjCGI.png")
-	png(toName,h=3,w=6,unit="in",res=300)
-	barplot(both,names=chr.names,ylab="# delta 20 windows",cex.names=0.5)
-	legend("top",legend=sum(both),bg=NA,bty="n")
-	dev.off()
-}
+# Exclude windows residing within repetitive elements (i.e. SINE, LINE, LTRs)
 
 annotations <- list.files()[grep("homer",list.files())]
 for(i in 1:length(annotations)){
+	toName <- gsub(".txt","",annotations[i])
 	reading <- read.table(annotations[i],head=T,sep="\t",comment.char="",quote="",stringsAsFactors=F)
-	reading$Annotation[grep("intron",reading$Annotation)] <- "intron"
-	reading$Annotation[grep("promoter-TSS",reading$Annotation)] <- "promoter-TSS"
-	reading$Annotation[grep("exon",reading$Annotation)] <- "exon"
-	reading$Annotation[grep("non-coding",reading$Annotation)] <- "non-coding"
-	reading$Annotation[grep("TTS",reading$Annotation)] <- "TTS"
-	cat(annotations[i]," ",table(reading$Annotation),"\n")
-	assign(annotations[i],reading)
+	colnames(reading)[1] <- "id"
+	assign(toName,reading)
 }
 
-for(i in 1:length(cancerType)){
+rm(annotations)
+rm(i)
+rm(reading)
+rm(toName)
 
-	type <- cancerType[i]
-	gr <- get(paste0(cancerType[i],".diff.gr"))
-	df.diff <- c() 
-	
+for(i in 1:length(grNames)){
+
+	grName <- gsub(".RDS",".gr",grNames[i])
+	gr <- get(grName)
+	df.diff <- c()
+		
 	for(j in 1:23){
 		df.diff <- rbind(df.diff,data.frame(seqnames=seqnames(gr[[j]]),starts=start(gr[[j]])-1,ends=end(gr[[j]]),mcols(gr[[j]])))
-		
 	}
 	
 	id <- paste(df.diff[,1],df.diff[,2],sep="_")
 	df.diff <- cbind(df.diff,id)
+	df.diff[,"id"] <- as.character(df.diff[,"id"])
 	
-	toName <- paste0(cancerType[i],".diff.df")
-	assign(toName,df.diff)
+	dfName <- gsub(".RDS",".df",grNames[i])
+	assign(dfName,df.diff)
 	
-	#df.diff.towrite <- cbind(df.diff[,1:3],id,"","0")
-	#toName <- paste0(cancerType[i],"_",min.diff,"_delta20_CI.txt")
-	#write.table(df.diff.towrite,toName,sep="\t",quote=F,row.names=F,col.names=F)
-
 }
 
-colnames(homer_BrCa_0_delta20_CI.txt)[1] <- "id"
-colnames(homer_OvCa_0_delta20_CI.txt)[1] <- "id"
+rm(df.diff)
+rm(dfName)
+rm(gr)
+rm(grName)
+rm(i)
+rm(j)
+rm(id)
 
-BrCa.diff.df <- merge(BrCa.diff.df,homer_BrCa_0_delta20_CI.txt,by="id")
-OvCa.diff.df <- merge(OvCa.diff.df,homer_OvCa_0_delta20_CI.txt,by="id")
-BrCa.diff.df <- BrCa.diff.df[which(BrCa.diff.df$CGI==TRUE & BrCa.diff.df$adjacent==1),]
-OvCa.diff.df <- OvCa.diff.df[which(OvCa.diff.df$CGI==TRUE & OvCa.diff.df$adjacent==1),]
-write.table(BrCa.diff.df,"BrCa_0_pyroCandidates.txt",sep="\t",row.names=F,quote=F)
-write.table(OvCa.diff.df,"OvCa_0_pyroCandidates.txt",sep="\t",row.names=F,quote=F)
+dfs <- ls()[grep(".df",ls())]
+annotations <- ls()[grep("_homer$",ls())]
 
-gwas <- read.table("gwas-downloaded_2018-01-12-ovarian_cancer.tsv",sep="\t",head=T,fill=T,stringsAsFactors=F)
+for(i in 1:length(dfs)){
+dfToTest <- get(dfs[i])
+homerToTest <- get(annotations[i])
+cat(identical(sort(as.character(dfToTest[,"id"])),sort(as.character(homerToTest[,"id"]))),"\n")
+cat(length(which(!dfToTest[,"id"] %in% homerToTest[,"id"])),"\n")
+}
 
-gwas.genes <- c(gwas$MAPPED_GENE,gwas$REPORTED.GENE.S.)
-gwas.genes <- unlist(str_split(gwas.genes,","))
-gwas.genes <- unlist(str_split(gwas.genes,"-"))
-gwas.genes <- unlist(str_split(gwas.genes," "))
-gwas.genes <- unique(gwas.genes)
-gwas.genes[which(gwas.genes=="")] <- NA
-gwas.genes <- as.character(na.omit(gwas.genes))
+rm(dfToTest)
+rm(homerToTest)
+rm(i)
 
-which(OvCa.diff.df$Gene.name %in% gwas.genes)
+for(i in 1:length(dfs)){
+dfToMerge <- get(dfs[i])
+homerToMerge <- get(annotations[i])
+toName <- gsub(".RDS",".merge",grNames[i])
+merged <- merge(dfToMerge,homerToMerge,by="id")
+assign(toName,merged)
+}
+
+rm(dfToMerge)
+rm(homerToMerge)
+rm(toName)
+rm(merged)
+rm(i)
+rm(dfs)
+
+repeats <- c("SINE\\|MIR", "SINE\\|Deu", "SINE\\|tRNA-RTE", "SINE\\|tRNA", "SINE\\|Alu", "SINE\\|5S", "Retroposon\\|SVA", "LINE\\|Penelope", "LINE\\|Dong-R4", "LINE\\|Jockey-I", "LINE\\|L2", "LINE\\|CR1", "LINE\\|RTE", "LINE\\|L1", "LTR\\|ERVK", "LTR\\|ERV1", "LTR", "LTR\\|ERVL", "LTR\\|Gypsy", "RC\\|Helitron", "DNA\\|TcMar", "DNA\\|PiggyBac", "DNA\\|MULE", "DNA\\|Merlin", "DNA", "DNA\\|Kolobok", "DNA\\|hAT", "DNA\\|Harbinger", "Unknown")
+
+for(i in 1:length(grNames)){
+	mergeName <- gsub(".RDS",".merge",grNames[i])
+	merged <- get(mergeName)
+	merged <- cbind(merged,Repetitive=0)
+	repetitiveWindows <- grep(paste0(repeats,collapse="|"),merged[,"Detailed.Annotation"])
+	merged[repetitiveWindows,"Repetitive"] <- 1
+	assign(mergeName,merged)
+}
+
+rm(mergeName)
+rm(merged)
+rm(repetitiveWindows)
+rm(repeats)
+
+
+# Identify pyrosequencing candidates
+
+for(i in 1:length(grNames)){
+	
+	mergeName <- gsub(".RDS",".merge",grNames[i])
+	merged <- get(mergeName)
+	direction <- merged[,"Casemean"]-merged[,"Controlmean"]
+	pyroCandidates <- merged[which(direction<0),]
+	pyroCandidates <- pyroCandidates[which(pyroCandidates$CpGs>=5
+	& pyroCandidates$Repetitive==0
+	& pyroCandidates$adjacent==1
+	),]
+	pyroName <- gsub(".RDS",".pyro",grNames[i])
+	assign(pyroName,pyroCandidates)
+}
+
+rm(direction)
+rm(i)
+rm(merged)
+rm(mergeName)
+rm(pyrocandidates)
+rm(pyroCandidates)
+rm(pyroName)
+
+# Identify TCBS candidates
+
+for(i in 1:length(grNames)){
+	
+	mergeName <- gsub(".RDS",".merge",grNames[i])
+	merged <- get(mergeName)
+	tcbsCandidates <- merged[which(
+	merged$Repetitive==0
+	& merged$CpGs>=5
+	#& merged$adjacent==1
+	),]
+	tcbsName <- gsub(".RDS",".tcbs",grNames[i])
+	assign(tcbsName,tcbsCandidates)
+}
+
+rm(i)
+rm(merged)
+rm(mergeName)
+rm(tcbsCandidates)
+rm(tcbsName)
