@@ -12,12 +12,11 @@ ats[i] <- ats[i]-0.5
 ats[i+1] <- ats[i+1]+0.5
 }
 
-for(i in 1:length(cancerType))
-	{
+for(i in 1:length(cancerType)){
 	plotName <- paste0(cancerType[i],"_",min.diff,"_densityScatterplot_meanMeth_byChr.png")
 	gr.all <- get(paste0("gr.",cancerType[i]))
 
-	# Plot density scatterplots
+	# Plot density scatterplots by chromosome
 	
 	png(plotName,h=6,w=6,unit="in",res=300)
 	par(mfrow=c(5,5),mar=c(2,2,1,1))
@@ -26,6 +25,22 @@ for(i in 1:length(cancerType))
 		}
 	dev.off()
 
+	# Plot density scatterplots
+	plotName <- paste0(cancerType[i],"_",min.diff,"_densityScatterplot_meanMeth.png")
+	
+	png(plotName,h=6,w=6,unit="in",res=300)
+		for(j in 1:23){
+		gr.chr <- gr.all[[j]]
+		cases <- c()
+		cases <- c(cases,gr.chr$Casemean)
+		controls <- c()
+		controls <- c(controls,gr.chr$Controlmean)
+		}
+		smoothScatter(controls,cases,colramp = Lab.palette,pch=NA,cex.axis=0.6,main=cancerType[i])
+		dev.off()
+		}
+	
+	
 	gr <- data.frame(c())
 		for(j in 1:23){
 		gr.chr <- gr.all[[j]]

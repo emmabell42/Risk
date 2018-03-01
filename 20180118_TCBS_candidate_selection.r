@@ -4,7 +4,7 @@ options(scipen = 999)
 cancerType <- c("OvCa")
 min.diff <- 0
 
-grNames <- list.files()[grep("RDS",list.files())]
+grNames <- list.files()[grep("RDS",list.files())][4]
 grNames <- grNames[grep(paste0(cancerType,collapse="|"),grNames)]
 for(i in 1:length(grNames)){
 	reading <- readRDS(grNames[i])
@@ -115,7 +115,8 @@ rm(j)
 
 # Exclude windows residing within repetitive elements (i.e. SINE, LINE, LTRs)
 
-annotations <- list.files()[grep("homer",list.files())]
+annotations <- list.files()[grep("homer",list.files())][8]
+annotations <- annotations[grep(paste0(cancerType,collapse="|"),annotations)]
 for(i in 1:length(annotations)){
 	toName <- gsub(".txt","",annotations[i])
 	reading <- read.table(annotations[i],head=T,sep="\t",comment.char="",quote="",stringsAsFactors=F)
@@ -201,47 +202,69 @@ rm(repetitiveWindows)
 rm(repeats)
 
 
-# Identify pyrosequencing candidates
+# Identify TCBS and pyrosequencing candidates
 
 for(i in 1:length(grNames)){
 	
 	mergeName <- gsub(".RDS",".merge",grNames[i])
 	merged <- get(mergeName)
 	direction <- merged[,"Casemean"]-merged[,"Controlmean"]
-	pyroCandidates <- merged[which(direction<0),]
-	pyroCandidates <- pyroCandidates[which(pyroCandidates$CpGs>=5
-	& pyroCandidates$Repetitive==0
-	& pyroCandidates$adjacent==1
+	candidatesWindows <- merged[which(direction<0),]
+	candidatesWindows <- candidatesWindows[which(
+	candidatesWindows$CpGs>=5
+	& 
+	candidatesWindows$Repetitive==0
+	& 
+	candidatesWindows$adjacent==1
 	),]
-	pyroName <- gsub(".RDS",".pyro",grNames[i])
-	assign(pyroName,pyroCandidates)
+	candidateName <- gsub(".RDS",".candidates",grNames[i])
+	assign(candidateName,candidatesWindows)
 }
 
 rm(direction)
 rm(i)
 rm(merged)
 rm(mergeName)
-rm(pyrocandidates)
-rm(pyroCandidates)
-rm(pyroName)
+rm(candidatesWindows)
+rm(candidateName)
 
-# Identify TCBS candidates
+# Assess the read coverage of each CpG within the pyro and TCBS candidate windows
 
-for(i in 1:length(grNames)){
-	
-	mergeName <- gsub(".RDS",".merge",grNames[i])
-	merged <- get(mergeName)
-	tcbsCandidates <- merged[which(
-	merged$Repetitive==0
-	& merged$CpGs>=5
-	#& merged$adjacent==1
-	),]
-	tcbsName <- gsub(".RDS",".tcbs",grNames[i])
-	assign(tcbsName,tcbsCandidates)
-}
+# Read in the table of CpGs filtered for 10+ read coverage
 
-rm(i)
-rm(merged)
-rm(mergeName)
-rm(tcbsCandidates)
-rm(tcbsName)
+coverage <- readRDS("/data/SHARE/GINA/pALL4_ovca_270317.rds")
+
+coverage.gr <- GRanges(coverage[,1],IRanges(coverage[,2],coverage[,3]))
+mcols(coverage.gr) <- as.data.frame(cbind(methCase=coverage[,4],coverageCase=coverage[,7],methControl=coverage[,11],coverageControl=coverage[,14]))
+
+OvCa_0_delta20.candidates.gr <- GRanges(OvCa_0_delta20.candidates[,2],IRanges(OvCa_0_delta20.candidates[,3],OvCa_0_delta20.candidates[,4]))
+
+# Count the number of CpGs with 10+ coverage within each candidate
+# Subset the candidate windows for only those with 5+ CpGs with 10+ coverage
+
+coverage.10 <- countOverlaps(OvCa_0_delta20.candidates.gr,coverage.gr)
+OvCa_0_delta20.candidates <- OvCa_0_delta20.candidates[which(coverage.10>=5),]
+
+# Rank the 3 useful metric
+
+deltaMeth <- OvCa_0_delta20.candidates$Casemean-OvCa_0_delta20.candidates$Controlmean
+deltaCIs <- OvCa_0_delta20.candidates$ControlLCI-OvCa_0_delta20.candidates$CaseUCI
+controlDeltaCI <- OvCa_0_delta20.candidates$ControlUCI-OvCa_0_delta20.candidates$ControlLCI
+summaryScore <- (abs(deltaMeth)*deltaCIs)/controlDeltaCI
+
+usefulMetrics <- cbind(deltaMeth,deltaCIs,controlDeltaCI,summaryScore)
+rownames(usefulMetrics) <- OvCa_0_delta20.candidates[,"id"]
+
+write.table(usefulMetrics,"OvCa_0_delta20.candidates_methylationSummaryScore.txt",sep="\t",quote=F)
+
+library(plotly)
+Sys.setenv("plotly_username"="emmabell42")
+Sys.setenv("plotly_api_key"="rB9RILKdVzDp1imVAEkM")
+
+p <- plot_ly(x = deltaMeth, y = deltaCIs, z = controlDeltaCI) %>%
+  add_markers() %>%
+  layout(scene = list(xaxis = list(title = 'deltaMeth'),
+                     yaxis = list(title = 'deltaCIs'),
+                     zaxis = list(title = 'controlDeltaCI')))
+
+chart_link = api_create(p, filename="basic")
