@@ -30,6 +30,8 @@ cancerType <- c("BrCa","OvCa")
 
 alpha <- 0.05
 
+regionsOfInterest <- c("promoter","exon","intron","tts","intergenic","LINE","SINE","LTR","satellite","cpg-island","low_complexity","simple_repeat")
+
 for(i in 1:length(cancerType)){
 
 	cancer <- cancerType[i]
@@ -37,6 +39,7 @@ for(i in 1:length(cancerType)){
 	annStats <- get(annStats)
 	annStats <- annStats[!duplicated(annStats[,1]),]
 	annStats[grep("\\?",annStats[,1]),1] <- NA
+	annStats <- annStats[grep(paste0(regionsOfInterest,collapse="|"),annStats[,1],ignore.case=T),]
 	annStats <- na.omit(annStats)
 	
 	annotationMatrix <- array(NA,dim=c(nrow(annStats),4))
@@ -107,23 +110,6 @@ toName <- gsub("RDS","gr",rdsFiles[i])
 assign(toName,rds)
 }
 
-# Get the number of bp of each annotation in the whole genome
-
-simpleAnnotation <- OvCa_0_delta20_homer$Annotation
-simpleAnnotation <- lapply(strsplit(simpleAnnotation," "), `[`, 1:2)
-simpleAnnotation <- simpleAnnotation[!duplicated(simpleAnnotation)]
-simpleAnnotation[grep("intron",simpleAnnotation)] <- "intron"
-simpleAnnotation[grep("Intergenic",simpleAnnotation)] <- "intergenic"
-simpleAnnotation[grep("TTS",simpleAnnotation)] <- "TTS"
-simpleAnnotation[grep("3'",simpleAnnotation)] <- "3UTR"
-simpleAnnotation[grep("non-coding",simpleAnnotation)] <- "non-coding"
-simpleAnnotation[grep("promoter-TSS",simpleAnnotation)] <- "promoter-TSS"
-simpleAnnotation[grep("exon",simpleAnnotation)] <- "exon"
-simpleAnnotation[grep("5'",simpleAnnotation)] <- "5UTR"
-simpleAnnotation <- simpleAnnotation[!duplicated(simpleAnnotation)]
-
-
-
 directions <- c("hypo","hyper")
 
 for(i in 1:length(cancerType)){
@@ -138,24 +124,33 @@ for(i in 1:length(cancerType)){
 	annStats <- get(annStats)
 	annStats <- annStats[!duplicated(annStats[,1]),]
 	annStats[grep("\\?",annStats[,1]),1] <- NA
+	annStats <- annStats[grep(paste0(regionsOfInterest,collapse="|"),annStats[,1],ignore.case=T),]
+	annStats[,1] <- gsub("3UTR","3' UTR",annStats[,1])
+	annStats[,1] <- gsub("5UTR","5' UTR",annStats[,1])
 	annStats <- na.omit(annStats)
 	
 	homer <- paste0(cancer,"_0_delta20_homer")
 	homer <- get(homer)
 	
 	delta20.gr <- delta20.gr[which(ids %in% homer[,"id"])]
-	ids <- ids[which(ids %in% homer[,"id"])]
-	
+			
+	simpleAnnotation <- homer$Annotation
+	simpleAnnotation <- lapply(strsplit(simpleAnnotation," "), `[`, 1)
+	simpleAnnotation <- unlist(simpleAnnotation)
+	simpleAnnotation[grep("intron",simpleAnnotation)] <- "Intron"
+	simpleAnnotation[grep("non-coding",simpleAnnotation)] <- "Intergenic"
+	simpleAnnotation[grep("promoter-TSS",simpleAnnotation)] <- "Promoter"
+	simpleAnnotation[grep("exon",simpleAnnotation)] <- "Exon"
+		
 	detailedAnnotation <- homer$Detailed.Annotation
 	
 	for(j in 1:nrow(annStats)){
 		annotation <- annStats[j,1]
-		if(length(grep("\\?",annotation))<1){
 		detailedAnnotation[grep(annotation,detailedAnnotation,ignore.case=T)] <- annotation
-		}
 	}
 
 	detailedAnnotation[grep("CpG",detailedAnnotation)] <- "CpG-Island"
+	detailedAnnotation[grep("\\|",detailedAnnotation)] <- simpleAnnotation[grep("\\|",detailedAnnotation)]
 	
 	for(k in 1:length(directions)){
 		
@@ -224,8 +219,7 @@ for(i in 1:length(cancerType)){
 	assign(toName,annotationMatrix)
 	
 	annotationToPlot <- c(which(annotationMatrix[,2]<1 & annotationMatrix[,3]<1),which(annotationMatrix[,2]>1 & annotationMatrix[,3]>1))
-	annotationToPlot <- sort(annotationToPlot)
-	
+		
 	annotationMatrix <- annotationMatrix[annotationToPlot,]
 	annotationMatrix <- annotationMatrix[order(annotationMatrix[,"OR"],decreasing=T),]
 	
