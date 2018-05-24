@@ -2,7 +2,8 @@
 # 	1. Reads in the methylation score and read count BigWig files;
 #	2. Compiles a table of methylation scores and read counts.
 
-setwd("/data/emmabell42/H3K4me3/BigWigs")
+setwd("/data/emmabell42/Hyperactive enhancers/MethBase")
+
 
 # Read in PU and DM
 library(GenomicRanges)
@@ -26,9 +27,11 @@ paths <- paths[!duplicated(paths)]
 rNames <- gsub("-","_",paths)
 rNames <- gsub("\\/",".",rNames)
 
-cpgs <- c()
+all.cpgs <- c()
+good.cpgs <- c()
 
 progress <- seq(5,100,5)
+previous.progress <- 0
 for(i in 1:length(paths)){
 	studyToRead <- paths[i]
 	rName <- rNames[i]
@@ -38,8 +41,7 @@ for(i in 1:length(paths)){
     "\n","Percentage complete",
     "\n","0","                ","100","\n","")
 	}
-    previous.progress <- 0
-	
+    	
 	methToRead <- paste0(studyToRead,".meth.bw")
 	coverageToRead <- paste0(studyToRead,".read.bw")
 	
@@ -51,25 +53,28 @@ for(i in 1:length(paths)){
 	
 	goodMeth <- meth[goodCoverage]
 	
+	#chr <- seqnames(goodMeth)
+	#starts <- start(goodMeth)
+	#all.cpgs_id <- paste(chr,starts,sep="_")
+	#all.cpgs <- c(all.cpgs,all.cpgs_id)
+	
 	goodMethEnhancers <- subsetByOverlaps(goodMeth,enhancers)
 	
 	chr <- seqnames(goodMethEnhancers)
 	starts <- start(goodMethEnhancers)
-	cpgs_id <- paste(chr,starts,sep="_")
-	cpgs <- c(cpgs,cpgs_id)
+	good.cpgs_id <- paste(chr,starts,sep="_")
+	good.cpgs <- c(good.cpgs,good.cpgs_id)
 		
 	assign(rName,goodMethEnhancers)
 	
 	if(i==1){
-		allMethList <- list(meth)
-		readList <- list(read)
-		
-		methList <- list(goodMethEnhancers)
+		#allMethList <- list(meth)
+		#goodMethList <- list(goodMeth)
+		enhancerMethList <- list(goodMethEnhancers)
 	} else {
-		allMethList <- c(allMethList,meth)
-		readList <- c(readList,read)
-		
-		methList <- c(methList,goodMethEnhancers)
+		#allMethList <- c(allMethList,meth)
+		#goodMethList <- c(goodMethList,goodMeth)
+		enhancerMethList <- c(enhancerMethList,goodMethEnhancers)
 	}
 	
 	pc <- (i/length(paths))*100
@@ -80,16 +85,34 @@ for(i in 1:length(paths)){
 	}
 	
 }
-cpgs.unique <- cpgs[!duplicated(cpgs)]
 
-allMethList <- GRangesList(allMethList)
-readList <- GRangesList(readList)
-methList <- GRangesList(methList)
-names(allMethList) <- rNames
-names(readList) <- rNames
-names(methList) <- rNames
+#cat("\n","Began working on allMeth",as.character(Sys.time()))
+#png("Boxplot_allMeth.png",h=6,w=12,unit="in",res=300)
+#boxplot(lapply(allMethList,function(x) mcols(x)[[1]]),col="lightgrey",xlab="Data set",ylab="CpG methylation",pch=20)
+#dev.off()
+#cat("\n","Began working on goodMeth",as.character(Sys.time()))
+#png("Boxplot_goodMeth.png",h=6,w=12,unit="in",res=300)
+#boxplot(goodMethList,col="lightgrey",xlab="Data set",ylab="CpG methylation",pch=20)
+#dev.off()
 
-# Save the methylation GRangesList as an RDS
-saveRDS(allMethList,"MethBase_mouse_methylation.RDS")
-saveRDS(readList,"MethBase_mouse_coverage.RDS")
-saveRDS(methList,"MethBase_mouse_enhancerMethylation.RDS")
+metadata <- read.csv("MethBase_index.csv")
+col <- rainbow(length(table(metadata$Source)))
+
+png("Boxplot_enhancerMeth.png",h=6,w=12,unit="in",res=300)
+boxplot(lapply(enhancerMethList,function(x) mcols(x)[[1]]),col=col[as.numeric(metadata$Source)],xlab="Data set",ylab="CpG methylation",pch=19)
+dev.off()
+
+for(i in 1:length(paths)){
+	dataset <- enhancerMethList[[i]]
+	hypo <- subsetByOverlaps(dataset,pu)
+	hyper <- subsetByOverlaps(dataset,dm)
+	rName <- rNames[i]
+	toName <- strsplit(rName,"\\.")[[1]][2]
+	fileName <- paste0("Boxplot_",rName,"_hypoVsHyper.png")
+	png(fileName,h=6,w=3,res=300,unit="in")
+	boxplot(mcols(hypo)[[1]],mcols(hyper)[[1]],col=c("green","magenta"),main=toName,ylim=c(0,1),pch=19,ylab="mCpG/CpG",names=c("PU","DM"))
+	dev.off()
+}
+
+
+
