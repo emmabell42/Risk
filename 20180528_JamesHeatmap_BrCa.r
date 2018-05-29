@@ -7,11 +7,7 @@
 # ---
 # # Aim
 
-# The project aims to create a gene-centered heatmap illustrating the difference in CpG methylation between ovarian cancer cases and controls along the length of the gene. I will initially consider the following regions:
-# -Promoter
-# -5' UTR
-# -Exon 1
-# -Intron 1
+# The project aims to create a gene-centered heatmap illustrating the difference in CpG methylation between breast cancer cases and controls along the length of the gene. This is a replication of the same heatmap generated in the ovarian cancer data.
 
 # ## Requirements
 
@@ -38,7 +34,7 @@
 # # Methodology
 
 # 1. Prepare the CpG methylation data.
-# 	1.1. Read in the CpG-level methylation data pertaining to ovarian cancer cases and controls.
+# 	1.1. Read in the CpG-level methylation data pertaining to breast cancer cases and controls.
 # 	1.2. Convert the table from 1.1 to a GRanges object.
 # 2. Get a list of all Ensembl genes in hg19 with the genomic co-ordinates of the TSS and TES.
 # 	2.1. Use biomaRt to retrieve the Ensembl ID, TSS, and TES of all genes in hg19.
@@ -53,14 +49,20 @@
 # # Results
 
 # 1. Prepare the CpG-level methylation data.
-# 	1.1. Read in the CpG methylation data pertaining to ovarian cancer cases and controls.
+# 	1.1. Read in the CpG methylation data pertaining to breast cancer cases and controls.
 
-# The file *pALL4_ovca_150217_filtered10coverage.rds* is a table where the rows are CpGs and the columns are genomic coordinates, read counts, and methylation percentages. 
-# James created this table by subsetting the original table to only those CpGs with 10X coverage.
-# The columns containing *55* and *56* respectively refer to the cases and controls.
+# The file *pALL4_211216.rds* is a table where the rows are CpGs and the columns are genomic coordinates, read counts, and methylation percentages. 
 
 # ```{r echo=TRUE}
-cpgs <- readRDS("/data/SHARE/GINA/pALL4_ovca_150217_filtered10coverage.rds")
+cpgs <- readRDS("/data/SHARE/GINA/pALL4_211216.rds")
+# ```
+
+# To remove low coverage CpGs, I will calculate the number of reads at each CpG in cases and controls, and then filter out those CpGs with <10 reads.
+
+# ```{r echo=TRUE}
+case.read <- cpgs$Ccase+cpgs$Tcase
+control.read <- cpgs$Ccont+cpgs$Tcont
+cpgs.10 <- cpgs[which(case.read>=10 & control.read>=10)]
 # ```
 
 #	1.2. Create a GRanges object from the CpG-level methylation data
@@ -79,7 +81,6 @@ mcols(cpgs.gr) <- as.data.frame(cbind(methCase=cpgs[,"meth55"],methControl=cpgs[
 
 # ```{r echo=TRUE}
 mart <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
-att <- listAttributes(mart)
 # ```
 
 # 	2.2. Remove entries on non-canonical chromosomes and duplicate Ensembl IDs.
@@ -120,126 +121,126 @@ start_position[antisense.index] <- genes[antisense.index,"end_position"]
 # ```
 
 # I'll create a GRanges object centered on the TSS of each Ensembl gene.
-# I'll extend those coordinates 3000 BP up- and downstream.
 
 # ```{r echo=TRUE}
 tss.gr <- GRanges(genes[,"chromosome_name"],IRanges(start_position,start_position))
 mcols(tss.gr) <- genes[,"ensembl_gene_id"]
-extend <- 3000
-tss.gr <- tss.gr+extend
+# ```
+
+# Set the parameters of the extension around the TSS and the size of the bins.
+
+# ```{r echo=TRUE}
+extensions <- c(500,1000,2000,3000,5000)
+precisions <- c(50,100,200,500)
 # ```
 
 # 	3.1. Subset the methylation data to just those CpGs that overlap with the TSS.
-
-# ```{r echo=TRUE}
-cpgs.tss.gr <- subsetByOverlaps(cpgs.gr,tss.gr)
-# ```
-
 # 	3.2. For a given Ensembl ID, get methylation information for all CpGs within its TSS.
-
-# ```{r echo=TRUE}
-delta.meths <- lapply(tss.gr,function(x) subsetByOverlaps(cpgs.tss.gr,x))
-# ```
-
-# 	3.3. For a given Ensembl ID, calculate the mean methylation for each 100 BP window and assemble the resulting values into an array.
-
-# The vector 'precision' contains the bin size in BP.
-
-# ```{r echo=TRUE}
-precision <- 20
-# ```
-
-# ```{r echo=TRUE}
-delta.meth.means <- array(NA,dim=c(length(delta.meths),2*extend/precision))
-# ```
-
-# ```{r echo=TRUE}
-progress <- seq(5,100,5)
-previous.progress <- 0
-# ```
-
-# ```{r echo=TRUE}
-for(n in 1){
-	cat("\n","Task started at",as.character(Sys.time()),
-    "\n","Percentage complete",
-    "\n","0","                ","100","\n","")
-
-	for(i in 1:length(delta.meths)){
-		window.start <- start(tss.gr)[i]
-		cpg.position <- start(delta.meths[[i]])-window.start
-		delta.meth <- mcols(delta.meths[[i]])[[3]]
-		breaks <- cut(cpg.position,breaks=seq(0,2*extend,precision))
-		bins <- split(delta.meth,breaks)
-		mean.meth <- sapply(bins,mean,na.rm=T)
-		delta.meth.means[i,] <- mean.meth
-		
-		pc <- (i/length(delta.meths))*100
-		current.progress <- which.min(abs(pc-progress))
-		if(current.progress>previous.progress){
-			cat("█")
-		previous.progress <- current.progress
-		}
-	}
-	cat("\n","Task completed at",as.character(Sys.time()),"\n")
-}
-# ```
-
 # 	3.3. Plot the resulting average methylation scores for each region set.
-
 # There are lots of bins containing NaN. These bins presumably have no CpGs or no measured variation in methylation.
 # *heatmap.2()* can't handle NaNs when constructing dendrograms. I will replace NaNs with 0.
-
-# ```{r echo=TRUE}
-delta.meth.means.noNAs <- delta.meth.means
-delta.meth.means.noNAs[is.na(delta.meth.means.noNAs)] <- 0
-# ```
-
-# 698 genes show no change in methylation at any window.
-
-# ```{r echo=TRUE}
-variation <- rowSums(delta.meth.means.noNAs)
-length(which(variation==0))
-# ```
-
 # I will use Euclidean distances clustered using the Ward method to create a dendrogram.
 # The "ward.D2" method is for use with non-squared distances.
-
-# ```{r echo=TRUE}
-distance.matrix <- dist(delta.meth.means.noNAs, method = "euclidean") 
-clustering <- hclust(1-distance.matrix, method="ward.D2") 
-# ```
-
 # I will use a blue-white-red colour scheme. Values between -10 and 10 will be coloured white.
 
 # ```{r echo=TRUE}
-breaks <- c(seq(range(delta.meth.means,na.rm=T,finite=T)[1],-10,length=4),seq(-9,9,length=2),seq(10,range(delta.meth.means,na.rm=T,finite=T)[2],length=4))
-cols <- colorRampPalette(c("blue", "white", "red"))(n = 9)
-# ```
+for(e in 1:length(extensions)){
+	
+	extend <- extensions[e]
+	cat("\n",as.character(Sys.time())," Analysing methylation at TSS +/-",extend," BP...","\n")
+	
+	tss.extend.gr <- tss.gr+extend
+	
+	cpgs.tss.gr <- subsetByOverlaps(cpgs.gr,tss.extend.gr)
+	
+	delta.meths <- lapply(tss.extend.gr,function(x) subsetByOverlaps(cpgs.tss.gr,x))
+	
+	for(p in 1:length(precisions)){
+		
+		precision <- precisions[p]
+		
+		cat("\n",as.character(Sys.time())," Calculating means over ",precision," BP windows...","\n")
+	
+		delta.meth.means <- array(NA,dim=c(length(delta.meths),2*extend/precision))
+	
+		progress <- seq(5,100,5)
+		previous.progress <- 0
+	
+		for(n in 1){
+	
+			cat("\n","Extension =",extend," Precision =",precision,"\n","Task started at",as.character(Sys.time()),
+			"\n","Percentage complete",
+			"\n","0","                ","100","\n","")
 
-# I will only label the TSS and +/- 3 KB positions.
+			for(i in 1:length(delta.meths)){
+				
+				if(i %in% antisense.index){
+				
+				window.start <- end(tss.extend.gr)[i]
+				cpg.position <- window.start-start(delta.meths[[i]])
+				
+				} else {
+								
+				window.start <- start(tss.extend.gr)[i]
+				cpg.position <- start(delta.meths[[i]])-window.start
+				
+				}
+				
+				delta.meth <- mcols(delta.meths[[i]])[[3]]
+							
+				breaks <- cut(cpg.position,breaks=seq(0,2*extend,precision))
+				bins <- split(delta.meth,breaks)
+				
+				mean.meth <- sapply(bins,mean,na.rm=T)
+				
+				delta.meth.means[i,] <- mean.meth
+				
+				pc <- (i/length(delta.meths))*100
+				current.progress <- which.min(abs(pc-progress))
+				if(current.progress>previous.progress){
+					cat("█")
+				previous.progress <- current.progress
+				}
+			
+			}
+			
+		}
+		
+		delta.meth.means.noNAs <- delta.meth.means
+		delta.meth.means.noNAs[is.na(delta.meth.means.noNAs)] <- 0
 
-# ```{r echo=TRUE}
-labCol <- rep("",2*extend/precision)
-labCol[1] <- "-3 KB"
-labCol[length(labCol)/2] <- "TSS"
-labCol[length(labCol)] <- "+ 3 KB"
-# ```
+		variation <- rowSums(delta.meth.means.noNAs)
+		length(which(variation==0))
+		
+		cat("\n",as.character(Sys.time())," Calculating distance matrix and clustering...","\n")
+		
+		distance.matrix <- dist(delta.meth.means.noNAs, method = "euclidean") 
+		clustering <- hclust(1-distance.matrix, method="ward.D2") 
 
-RowSideColors <- as.character(genes[,"strand"])
-RowSideColors <- gsub("-1","darkgrey",RowSideColors)
-RowSideColors <- gsub("1","lightgrey",RowSideColors)
+		breaks <- c(seq(range(delta.meth.means,na.rm=T,finite=T)[1],-10,length=4),seq(-9,9,length=2),seq(10,range(delta.meth.means,na.rm=T,finite=T)[2],length=4))
+		cols <- colorRampPalette(c("blue", "white", "red"))(n = 9)
 
-# ```{r echo=TRUE}
-pngName <- paste0("Heatmap_TSS_OvCa_",precision,".png")
-png("Heatmap_TSS_OvCa.png",h=12,w=12,res=300,unit="in")
-heatmap.2(delta.meth.means.noNAs,
-trace="n",
-lhei=c(1,4), # layout
-RowSideColors=RowSideColors,
-col=cols,breaks=breaks,scale="none", # colour
-symm=F,symkey=F,symbreaks=T,density.info="none",keysize=1,key.title="",key.xlab=expression(paste(Delta," methylation")),key.par=list(cex=1), # key
-dendrogram="row",Colv=F,Rowv=as.dendrogram(clustering), # dendrograms
-labRow="",labCol=labCol,cexCol=2,srtCol=0,adjCol = c(0.5,1) # row and column labels
-)
-dev.off()
+		labCol <- rep("",2*(extend/precision))
+		labCol[1] <- paste0("-",(extend/1000),"KB")
+		labCol[length(labCol)] <- paste0("+",(extend/1000),"KB")
+
+		RowSideColors <- as.character(genes[,"strand"])
+		RowSideColors <- gsub("-1","darkgrey",RowSideColors)
+		RowSideColors <- gsub("1","lightgrey",RowSideColors)
+
+		cat("\n",as.character(Sys.time())," Plotting heatmap...","\n")
+		
+		pngName <- paste0("Heatmap_OvCa_TSS_plus",extend,"_",precision,"BP.png")
+		png(pngName,h=12,w=12,res=300,unit="in")
+		heatmap.2(delta.meth.means.noNAs,
+		trace="n",
+		lhei=c(1,4), # layout
+		col=cols,breaks=breaks,scale="none", # colour
+		symm=F,symkey=F,symbreaks=T,density.info="none",keysize=1,key.title="",key.xlab=expression(paste(Delta," methylation")),key.par=list(cex=1), # key
+		dendrogram="row",Colv=F,Rowv=as.dendrogram(clustering), # dendrograms
+		labRow="",labCol=labCol,cexCol=1.25,srtCol=0,adjCol = c(0.5,1),xlab="TSS",mar=c(2,2) # row and column labels
+		)
+		dev.off()
+	}
+}
 # ```
